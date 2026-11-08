@@ -1,0 +1,832 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#eef0f5" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e1117" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.4 system-ui,-apple-system,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Pocket Deck</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pocket Deck">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one-column phone app. Home = deck list; Study = card fills the screen, answer buttons pinned to the thumb zone. */
+:root{
+  --bg:#eef0f5; --surface:#ffffff; --fg:#151923; --muted:#5b6274; --line:#d9dce6;
+  --accent:#2a49c9; --accent-ink:#ffffff;
+  --new:#2563d6; --learn:#c43d27; --due:#23804a; --hard:#a8650e;
+  --display:"Bricolage Grotesque",ui-rounded,system-ui,sans-serif;
+  --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --radius:14px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1117; --surface:#171b24; --fg:#e7e9ef; --muted:#9aa1b3; --line:#283041;
+  --accent:#7f97ff; --accent-ink:#0e1117;
+  --new:#78a6ff; --learn:#ff8b75; --due:#6fd394; --hard:#f2b05a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1117; --surface:#171b24; --fg:#e7e9ef; --muted:#9aa1b3; --line:#283041;
+  --accent:#7f97ff; --accent-ink:#0e1117;
+  --new:#78a6ff; --learn:#ff8b75; --due:#6fd394; --hard:#f2b05a; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:16px;line-height:1.5;
+  -webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,label:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.screen{min-height:100%;display:flex;flex-direction:column}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  width:100%;max-width:640px;margin:0 auto;box-sizing:border-box}
+
+/* Home */
+.top{padding-block:20px 8px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--display);font-weight:700;font-size:2rem;line-height:1;margin:0;letter-spacing:-.02em}
+.sub{color:var(--muted);font-size:.85rem;margin:6px 0 0}
+.import{display:inline-flex;align-items:center;gap:8px;background:var(--accent);color:var(--accent-ink);
+  border:0;border-radius:999px;padding:10px 16px;font-weight:600;white-space:nowrap}
+.import input{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.status{margin:10px 0 0;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:.9rem}
+.status.err{border-color:var(--learn);color:var(--learn)}
+.legend{display:flex;gap:14px;font-size:.75rem;color:var(--muted);padding-block:16px 6px;text-transform:uppercase;letter-spacing:.06em}
+.legend b{font-weight:600}
+.decks{display:flex;flex-direction:column;gap:8px;padding-bottom:32px}
+.deck{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius)}
+.deck-open{flex:1;min-width:0;display:flex;align-items:center;gap:12px;background:none;border:0;text-align:left;padding:14px 4px 14px 16px}
+.deck-name{flex:1;min-width:0;font-weight:600;overflow-wrap:anywhere}
+.deck-name small{display:block;font-weight:400;color:var(--muted);font-size:.8rem}
+.counts{display:flex;gap:10px;font-variant-numeric:tabular-nums;font-weight:600}
+.counts span{min-width:2ch;text-align:right}
+.c-new{color:var(--new)} .c-learn{color:var(--learn)} .c-due{color:var(--due)}
+.zero{opacity:.3}
+.more{background:none;border:0;padding:14px 14px;color:var(--muted);border-radius:var(--radius)}
+.tag{display:inline-block;font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;border:1px solid var(--line);
+  border-radius:6px;padding:0 5px;margin-left:6px;vertical-align:2px;color:var(--muted);font-weight:600}
+.menu{display:flex;flex-wrap:wrap;gap:8px;padding:0 12px 12px}
+.menu button{border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 12px;font-size:.9rem}
+.menu .danger{color:var(--learn);border-color:var(--learn)}
+.empty{color:var(--muted);text-align:center;padding:40px 8px}
+.note{color:var(--muted);font-size:.8rem;padding-bottom:24px}
+
+/* Study */
+.bar{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+.bar .wrap{display:flex;align-items:center;gap:10px;padding-block:10px}
+.back{background:none;border:0;padding:6px 8px 6px 0;color:var(--accent);font-weight:600;display:flex;align-items:center;gap:4px}
+.bar-title{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.undo{background:none;border:0;color:var(--accent);font-weight:600;padding:6px 0 6px 8px}
+.undo:disabled{color:var(--muted);opacity:.4}
+.stage{flex:1;display:flex;flex-direction:column;padding-block:16px 16px}
+.card-host{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px 18px;
+  overflow-wrap:anywhere;min-height:40vh;box-sizing:border-box}
+.dock{position:sticky;bottom:0;background:var(--bg);padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+.dock .wrap{padding-block:10px 0}
+.queue{display:flex;justify-content:center;gap:16px;font-variant-numeric:tabular-nums;font-weight:600;font-size:.95rem;padding-bottom:10px}
+.queue .on{text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:2px}
+.show{width:100%;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);padding:16px;font-weight:600;font-size:1.05rem}
+.grades{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.grades button{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 4px;display:flex;flex-direction:column;align-items:center;gap:2px}
+.grades small{font-size:.75rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.grades span{font-weight:600}
+.g1 span{color:var(--learn)} .g2 span{color:var(--hard)} .g3 span{color:var(--due)} .g4 span{color:var(--new)}
+.done{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:10px;padding:40px 8px}
+.done h2{font-family:var(--display);font-size:1.6rem;margin:0}
+.done p{color:var(--muted);margin:0;max-width:34ch}
+.done button{margin-top:10px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 18px;font-weight:600}
+.linkbtn{background:none;border:0;color:var(--accent);font-weight:600;padding:0 0 0 4px;font-size:inherit;text-decoration:underline;text-underline-offset:3px}
+.replay{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:4px 12px;font-size:.85rem;font-weight:600;margin-left:6px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(150px + env(safe-area-inset-bottom,0px));z-index:20;max-width:min(92vw,420px);background:var(--fg);color:var(--bg);padding:10px 14px;border-radius:12px;font-size:.9rem;text-align:center}
+@media (prefers-reduced-motion:no-preference){.card-host{transition:opacity .12s}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+"use strict";
+/*IMPORTER-START*/
+const LIB = {
+  zip: "lib/jszip.min.js",
+  sql: "lib/sql-asm-memory-growth.js",
+  zstd: "lib/fzstd.js"
+};
+const MIME = {jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",gif:"image/gif",webp:"image/webp",svg:"image/svg+xml",
+  mp3:"audio/mpeg",m4a:"audio/mp4",ogg:"audio/ogg",oga:"audio/ogg",wav:"audio/wav",opus:"audio/ogg",
+  mp4:"video/mp4",webm:"video/webm",mov:"video/quicktime"};
+const utf8 = new TextDecoder();
+const isZstd = u => u.length > 4 && u[0] === 0x28 && u[1] === 0xB5 && u[2] === 0x2F && u[3] === 0xFD;
+
+function varint(b, i){ let v = 0, m = 1, x; do { x = b[i++]; v += (x & 127) * m; m *= 128; } while (x & 128); return [v, i]; }
+function pb(b){ // minimal protobuf reader: {fieldNumber: [values]}
+  const out = {}; let i = 0;
+  while (i < b.length){
+    let key; [key, i] = varint(b, i);
+    const f = Math.floor(key / 8), w = key & 7; let v;
+    if (w === 0) [v, i] = varint(b, i);
+    else if (w === 2){ let n; [n, i] = varint(b, i); v = b.subarray(i, i + n); i += n; }
+    else if (w === 5){ v = b.subarray(i, i + 4); i += 4; }
+    else if (w === 1){ v = b.subarray(i, i + 8); i += 8; }
+    else break;
+    (out[f] || (out[f] = [])).push(v);
+  }
+  return out;
+}
+const pbStr = (o, f) => o[f] ? utf8.decode(o[f][0]) : "";
+
+function rows(db, sql){
+  const r = db.exec(sql); if (!r.length) return [];
+  const { columns, values } = r[0];
+  return values.map(v => Object.fromEntries(columns.map((c, i) => [c, v[i]])));
+}
+
+// ---------- template rendering ----------
+const stripHtml = s => String(s).replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ");
+function cloze(text, n, back){
+  return String(text).replace(/\{\{c(\d+)::([\s\S]*?)(?:::([\s\S]*?))?\}\}/g, (m, num, body, hint) => {
+    if (+num !== n) return body;
+    return back ? `<span class="cloze">${body}</span>` : `<span class="cloze">[${hint || "..."}]</span>`;
+  });
+}
+function renderTemplate(tpl, fields, ctx){
+  let s = String(tpl || "");
+  const has = name => stripHtml(fields[name.trim()] ?? "").trim().length > 0;
+  // sections, innermost-safe by repeating
+  for (let k = 0; k < 20; k++){
+    const before = s;
+    s = s.replace(/\{\{([#^])\s*([^}]+?)\s*\}\}([\s\S]*?)\{\{\/\s*\2\s*\}\}/g,
+      (m, kind, name, inner) => (kind === "#") === has(name.split(":").pop()) ? inner : "");
+    if (s === before) break;
+  }
+  return s.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (m, expr) => {
+    if (expr === "FrontSide") return ctx.front || "";
+    const parts = expr.split(":"); const name = parts.pop().trim(); const filters = parts.map(p => p.trim());
+    if (filters.includes("type")) return "";
+    const tts = filters.find(f => f.startsWith("tts"));
+    if (tts){
+      const txt = stripHtml(name in fields ? fields[name] : "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
+      const lang = (tts.split(/\s+/)[1] || "en_US").replace("_", "-");
+      return txt ? `<button class="pd-sound" type="button" data-tts="${attr(txt)}" data-lang="${attr(lang)}" aria-label="Speak">&#9654;</button>` : "";
+    }
+    let v = name in fields ? fields[name] : (ctx.special[name] ?? "");
+    if (filters.includes("cloze")) v = cloze(v, ctx.ord + 1, ctx.back);
+    if (filters.includes("text")) v = stripHtml(v);
+    if (filters.includes("hint")) v = v ? `<details class="hint"><summary>Show hint</summary>${v}</details>` : "";
+    return v;
+  });
+}
+const attr = s => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const sndBtn = f => `<button class="pd-sound" type="button" data-src="${attr(f)}" aria-label="Play audio">&#9654;</button>`;
+function soundTags(html){
+  return String(html)
+    .replace(/<audio\b[^>]*>[\s\S]*?<\/audio>/gi, m => { const s = m.match(/\ssrc=["']([^"']+)["']/i); return s ? sndBtn(s[1]) : ""; })
+    .replace(/\[sound:([^\]]+)\]/g, (m, f) => sndBtn(f));
+}
+
+async function parseApkg(buffer, libs, onStep = () => {}){
+  const { JSZip, initSqlJs, fzstd } = libs;
+  onStep("Opening file");
+  const zip = await JSZip.loadAsync(buffer);
+  const pick = ["collection.anki21b", "collection.anki21", "collection.anki2"].find(n => zip.file(n));
+  if (!pick) throw new Error("This file has no Anki collection inside. Make sure it is an .apkg or .colpkg export.");
+  let bytes = await zip.file(pick).async("uint8array");
+  if (isZstd(bytes)) bytes = fzstd.decompress(bytes);
+  onStep("Reading cards");
+  const SQL = await initSqlJs();
+  const db = new SQL.Database(bytes);
+  try {
+    const tables = new Set(rows(db, "select name from sqlite_master where type='table'").map(r => r.name));
+    const col = rows(db, "select * from col")[0] || {};
+    const crt = Number(col.crt) || Math.floor(Date.now() / 1000);
+    const models = {}; const deckNames = {};
+    if (tables.has("notetypes")){
+      for (const r of rows(db, "select id,name,config from notetypes")){
+        const cfg = pb(r.config || new Uint8Array());
+        models[r.id] = { name: r.name, cloze: (cfg[1] && cfg[1][0]) === 1, css: pbStr(cfg, 3), flds: [], tmpls: [] };
+      }
+      for (const r of rows(db, "select ntid,ord,name from fields order by ntid,ord")) models[r.ntid] && (models[r.ntid].flds[r.ord] = r.name);
+      for (const r of rows(db, "select ntid,ord,config from templates order by ntid,ord")){
+        const cfg = pb(r.config || new Uint8Array());
+        models[r.ntid] && (models[r.ntid].tmpls[r.ord] = { q: pbStr(cfg, 1), a: pbStr(cfg, 2) });
+      }
+    } else {
+      const m = JSON.parse(col.models || "{}");
+      for (const id in m){
+        const x = m[id];
+        models[id] = { name: x.name, cloze: x.type === 1, css: x.css || "",
+          flds: x.flds.slice().sort((a, b) => a.ord - b.ord).map(f => f.name),
+          tmpls: x.tmpls.slice().sort((a, b) => a.ord - b.ord).map(t => ({ q: t.qfmt, a: t.afmt })) };
+      }
+    }
+    if (tables.has("decks")) for (const r of rows(db, "select id,name from decks")) deckNames[r.id] = String(r.name).split("\x1f").join("::");
+    else { const d = JSON.parse(col.decks || "{}"); for (const id in d) deckNames[id] = d[id].name; }
+
+    const notes = {};
+    for (const r of rows(db, "select id,mid,flds,tags from notes")) notes[r.id] = r;
+    const cards = [];
+    const now = Date.now();
+    for (const c of rows(db, "select id,nid,did,ord,type,queue,due,ivl,factor,lapses,reps from cards order by did,due,id")){
+      const n = notes[c.nid]; if (!n) continue;
+      const m = models[n.mid]; if (!m) continue;
+      const vals = String(n.flds).split("\x1f");
+      const fields = {}; m.flds.forEach((name, i) => fields[name] = vals[i] ?? "");
+      const deck = deckNames[c.did] || "Imported";
+      const special = { Tags: String(n.tags || "").trim(), Deck: deck, Subdeck: deck.split("::").pop(), Type: m.name, Card: "" };
+      const t = m.cloze ? m.tmpls[0] : m.tmpls[c.ord];
+      if (!t) continue;
+      const q = renderTemplate(t.q, fields, { ord: c.ord, back: false, special });
+      const a = renderTemplate(t.a, fields, { ord: c.ord, back: true, special, front: renderTemplate(t.q, fields, { ord: c.ord, back: true, special }) });
+      // carry over existing Anki progress
+      let s = { t: 0, due: 0, ivl: 0, ease: 2.5, step: 0, r: false, lapses: c.lapses || 0, reps: c.reps || 0, sus: c.queue === -1 };
+      if (c.type === 2){
+        const d = new Date((crt + c.due * 86400) * 1000); d.setHours(0, 0, 0, 0);
+        s = { ...s, t: 2, due: d.getTime(), ivl: Math.max(1, c.ivl), ease: (c.factor || 2500) / 1000 };
+      } else if (c.type === 1 || c.type === 3){
+        s = { ...s, t: 1, due: now, r: c.type === 3, ivl: Math.max(0, c.ivl), ease: (c.factor || 2500) / 1000 };
+      }
+      cards.push({ id: String(c.id), deck: deck.split("::")[0], m: String(n.mid), q: soundTags(q), a: soundTags(a), s });
+    }
+    const css = {}; for (const id in models) css[id] = models[id].css;
+
+    onStep("Loading images and audio");
+    const media = [];
+    const mf = zip.file("media");
+    if (mf){
+      let raw = await mf.async("uint8array");
+      let map = null;
+      try { map = JSON.parse(utf8.decode(raw)); } catch (e) {}
+      if (!map){
+        if (isZstd(raw)) raw = fzstd.decompress(raw);
+        map = {};
+        (pb(raw)[1] || []).forEach((entry, i) => {
+          const e = pb(entry); const zipName = e[255] ? String(e[255][0]) : String(i);
+          map[zipName] = pbStr(e, 1);
+        });
+      }
+      for (const zipName in map){
+        const f = zip.file(zipName); if (!f) continue;
+        let u = await f.async("uint8array");
+        if (isZstd(u)) u = fzstd.decompress(u);
+        const name = map[zipName]; const ext = name.split(".").pop().toLowerCase();
+        media.push({ name, type: MIME[ext] || "application/octet-stream", data: u });
+      }
+    }
+    return { cards, css, media };
+  } finally { db.close(); }
+}
+
+// ---------- scheduler (Anki-style SM-2) ----------
+const MIN = 60000, DAY = 86400000;
+const startOfDay = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+function schedule(s0, g, now){
+  const s = { ...s0, reps: (s0.reps || 0) + 1 };
+  const today = startOfDay(now);
+  if (s.t !== 2){
+    const steps = s.r ? [10] : [1, 10];
+    const grad = ivl => Object.assign(s, { t: 2, ivl, step: 0, r: false, due: today + ivl * DAY });
+    if (g === 1) Object.assign(s, { t: 1, step: 0, due: now + steps[0] * MIN });
+    else if (g === 2){
+      const m = s.step === 0 && steps.length > 1 ? (steps[0] + steps[1]) / 2 : steps[Math.min(s.step, steps.length - 1)];
+      Object.assign(s, { t: 1, due: now + m * MIN });
+    }
+    else if (g === 3){ if (s.step + 1 < steps.length) Object.assign(s, { t: 1, step: s.step + 1, due: now + steps[s.step + 1] * MIN }); else grad(s.r ? Math.max(1, s.ivl) : 1); }
+    else grad(s.r ? Math.max(1, s.ivl) + 1 : 4);
+    return s;
+  }
+  let ivl = s.ivl;
+  if (g === 1){ s.lapses = (s.lapses || 0) + 1; s.ease = Math.max(1.3, s.ease - 0.2); s.ivl = Math.max(1, Math.round(ivl * 0.2)); return Object.assign(s, { t: 1, r: true, step: 0, due: now + 10 * MIN }); }
+  const hard = Math.max(ivl + 1, Math.round(ivl * 1.2));
+  const good = Math.max(hard + 1, Math.round(ivl * s.ease));
+  const easy = Math.max(good + 1, Math.round(ivl * s.ease * 1.3));
+  if (g === 2){ ivl = hard; s.ease = Math.max(1.3, s.ease - 0.15); }
+  else if (g === 3) ivl = good;
+  else { ivl = easy; s.ease += 0.15; }
+  s.ivl = Math.min(36500, ivl); s.due = today + s.ivl * DAY;
+  return s;
+}
+/*IMPORTER-END*/
+
+// ---------- storage (IndexedDB, memory fallback) ----------
+const Store = (() => {
+  const STORES = ["decks", "cards", "sched", "media", "meta"];
+  let dbp = null, mem = null;
+  function open(){
+    if (dbp) return dbp;
+    dbp = new Promise((res, rej) => {
+      try {
+        const r = indexedDB.open("pocket-deck", 1);
+        r.onupgradeneeded = () => STORES.forEach(s => r.result.createObjectStore(s, { keyPath: "k" }));
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      } catch (e){ rej(e); }
+    }).catch(() => { mem = Object.fromEntries(STORES.map(s => [s, new Map()])); return null; });
+    return dbp;
+  }
+  const req = r => new Promise((res, rej) => { r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+  const done = tx => new Promise((res, rej) => { tx.oncomplete = res; tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+  const range = p => IDBKeyRange.bound(p + "|", p + "|￿");
+  return {
+    get persistent(){ return !mem; },
+    async putMany(store, arr){
+      const db = await open();
+      if (!db){ arr.forEach(o => mem[store].set(o.k, o)); return; }
+      const tx = db.transaction(store, "readwrite"); const os = tx.objectStore(store);
+      arr.forEach(o => os.put(o)); await done(tx);
+    },
+    put(store, o){ return this.putMany(store, [o]); },
+    async get(store, k){ const db = await open(); if (!db) return mem[store].get(k); return req(db.transaction(store).objectStore(store).get(k)); },
+    async all(store){ const db = await open(); if (!db) return [...mem[store].values()]; return req(db.transaction(store).objectStore(store).getAll()); },
+    async prefix(store, p){
+      const db = await open();
+      if (!db) return [...mem[store].values()].filter(o => o.k.startsWith(p + "|"));
+      return req(db.transaction(store).objectStore(store).getAll(range(p)));
+    },
+    async delPrefix(store, p){
+      const db = await open();
+      if (!db){ for (const k of [...mem[store].keys()]) if (k.startsWith(p + "|")) mem[store].delete(k); return; }
+      const tx = db.transaction(store, "readwrite"); tx.objectStore(store).delete(range(p)); await done(tx);
+    },
+    async del(store, k){ const db = await open(); if (!db){ mem[store].delete(k); return; } const tx = db.transaction(store, "readwrite"); tx.objectStore(store).delete(k); await done(tx); },
+    async keys(store, p){
+      const db = await open();
+      if (!db) return [...mem[store].keys()].filter(k => k.startsWith(p + "|")).map(k => k.slice(p.length + 1));
+      const ks = await req(db.transaction(store).objectStore(store).getAllKeys(range(p)));
+      return ks.map(k => k.slice(p.length + 1));
+    },
+    ready: () => open()
+  };
+})();
+
+// ---------- helpers ----------
+const $app = document.getElementById("app");
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const dayKey = t => new Date(t).toDateString();
+function fmtIvl(ms){
+  const m = ms / MIN;
+  if (m < 60) return Math.max(1, Math.round(m)) + "m";
+  if (m < 1440) return Math.round(m / 60) + "h";
+  const d = ms / DAY;
+  if (d < 30) return Math.round(d) + "d";
+  if (d < 365) return (d / 30).toFixed(1).replace(".0", "") + "mo";
+  return (d / 365).toFixed(1).replace(".0", "") + "y";
+}
+// ---------- audio ----------
+// Plays through a normal audio element first. If the phone or the page frame refuses that,
+// it decodes the file and plays it through Web Audio instead. Text-to-speech cards use the phone's voices.
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+const player = new Audio(); player.setAttribute("playsinline", ""); player.preload = "auto";
+const blobOf = new Map();
+let unlocked = false, playToken = 0, notifyFn = () => {}, ac = null, webSrc = null, pending = null;
+
+function mediaCandidates(name){
+  const base = [name, name.replace(/&amp;/g, "&")];
+  try { base.push(decodeURIComponent(name)); } catch (e) {}
+  return [...new Set(base.flatMap(n => [n, n.normalize("NFC"), n.normalize("NFD")]))];
+}
+function getAC(){
+  if (!ac){ const C = window.AudioContext || window.webkitAudioContext; if (C){ try { ac = new C(); } catch (e) {} } }
+  return ac;
+}
+function unlockAudio(){
+  if (unlocked && ac && ac.state === "running") return;
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (e) {}
+  const c = getAC();
+  if (c){
+    if (c.state !== "running") c.resume().catch(() => {});
+    try { const s = c.createBufferSource(); s.buffer = c.createBuffer(1, 1, 22050); s.connect(c.destination); s.start(0); } catch (e) {}
+  }
+  if (!unlocked && !pending){
+    try { player.src = SILENT; const p = player.play(); if (p && p.then) p.then(() => { unlocked = true; }).catch(() => {}); } catch (e) {}
+  }
+}
+["pointerdown", "touchend", "click"].forEach(t => document.addEventListener(t, unlockAudio, true));
+
+function stopSources(){
+  try { if (webSrc){ webSrc.onended = null; webSrc.stop(); } } catch (e) {}
+  webSrc = null;
+  try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {}
+}
+function stopAudio(){
+  playToken++;
+  try { player.pause(); } catch (e) {}
+  stopSources();
+  if (pending){ const r = pending; pending = null; r(); }
+}
+function playItem(it, my){
+  return new Promise(resolve => {
+    pending = resolve;
+    const finish = () => {
+      if (my === playToken){ player.onended = null; player.onerror = null; }
+      if (pending === resolve) pending = null;
+      resolve();
+    };
+    if (it.tts){
+      try {
+        const u = new SpeechSynthesisUtterance(it.tts); u.lang = it.lang || "en-US";
+        u.onend = finish; u.onerror = finish; speechSynthesis.speak(u);
+      } catch (e) { notifyFn("Text to speech is not available on this device."); finish(); }
+      return;
+    }
+    let fell = false;
+    const viaWeb = async why => {
+      if (fell) return; fell = true;
+      try {
+        const c = getAC(); if (!c) throw new Error("Web Audio unavailable");
+        if (c.state !== "running") await c.resume();
+        const data = await it.blob.arrayBuffer();
+        const buf = await new Promise((res, rej) => c.decodeAudioData(data, res, rej));
+        if (my !== playToken) return finish();
+        const s = c.createBufferSource(); s.buffer = buf; s.connect(c.destination); s.onended = finish; webSrc = s; s.start(0);
+      } catch (e) { notifyFn("Could not play this audio (" + why + ", " + ((e && e.name) || "decode failed") + ")."); finish(); }
+    };
+    player.onended = finish;
+    player.onerror = () => viaWeb("media error");
+    player.src = it.u;
+    const p = player.play();
+    if (p && p.catch) p.catch(err => { if (my === playToken && !(err && err.name === "AbortError")) viaWeb((err && err.name) || "blocked"); });
+  });
+}
+async function playList(list){
+  stopAudio(); const my = playToken;
+  for (const it of list){ if (my !== playToken) return; await playItem(it, my); }
+}
+
+// ---------- sound test ----------
+function makeWav(freq = 880, secs = 0.25, rate = 8000){
+  const n = Math.floor(rate * secs), b = new DataView(new ArrayBuffer(44 + n * 2));
+  const w = (o, s) => [...s].forEach((c, i) => b.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); b.setUint32(4, 36 + n * 2, true); w(8, "WAVEfmt "); b.setUint32(16, 16, true); b.setUint16(20, 1, true); b.setUint16(22, 1, true);
+  b.setUint32(24, rate, true); b.setUint32(28, rate * 2, true); b.setUint16(32, 2, true); b.setUint16(34, 16, true); w(36, "data"); b.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) b.setInt16(44 + i * 2, Math.sin(2 * Math.PI * freq * i / rate) * 9000 * Math.min(1, (n - i) / 400), true);
+  return new Blob([b], { type: "audio/wav" });
+}
+function testHtml(u){
+  return new Promise(res => {
+    player.onended = () => res("ok"); player.onerror = () => res("blocked or unsupported");
+    player.src = u; const p = player.play();
+    if (p && p.catch) p.catch(e => res((e && e.name) || "error"));
+  });
+}
+async function testWeb(blob){
+  try {
+    const c = getAC(); if (!c) return "unavailable";
+    await c.resume();
+    const data = await blob.arrayBuffer();
+    const buf = await new Promise((res, rej) => c.decodeAudioData(data, res, rej));
+    return await new Promise(res => { const s = c.createBufferSource(); s.buffer = buf; s.connect(c.destination); s.onended = () => res("ok"); s.start(0); });
+  } catch (e) { return (e && e.name) || "error"; }
+}
+
+function loadScript(src){
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) return res();
+    const s = document.createElement("script"); s.src = src; s.onload = res;
+    s.onerror = () => rej(new Error("Could not load a needed component. Check your internet connection and try again."));
+    document.head.appendChild(s);
+  });
+}
+
+function counts(deck, scheds, now = Date.now()){
+  const eod = startOfDay(now) + DAY;
+  let n = 0, l = 0, d = 0;
+  for (const s of scheds){
+    if (s.sus) continue;
+    if (s.t === 0) n++;
+    else if (s.t === 1){ if (s.due <= now + 20 * MIN) l++; }
+    else if (s.due < eod) d++;
+  }
+  const doneToday = deck.newDay === dayKey(now) ? deck.newDone : 0;
+  return { n: Math.min(n, Math.max(0, (deck.newPerDay ?? 20) - doneToday)), l, d };
+}
+
+// ---------- sample deck ----------
+const SAMPLE = [
+  ["What does <b>spaced repetition</b> do?", "Shows a card again right before you would forget it, so each review counts more."],
+  ["Le mot anglais pour <i>la mémoire</i>", "memory"],
+  ["What file type does Anki export decks as?", ".apkg (a zip with a SQLite database and your media)"],
+  ["After you tap <b>Good</b> on a new card twice, when does it come back?", "Tomorrow. Then the gap keeps growing: about 3 days, 1 week, 3 weeks..."],
+  ["How do you add your own decks here?", "Tap <b>Import .apkg</b> and pick the file from the Files app or iCloud Drive."]
+];
+async function seedSample(){
+  const meta = await Store.get("meta", "seeded"); if (meta) return;
+  const id = "sample";
+  await Store.put("decks", { k: id, name: "Getting started", sample: true, group: id, css: {}, newPerDay: 20, created: Date.now() });
+  await Store.putMany("cards", SAMPLE.map((c, i) => ({ k: `${id}|${i}`, q: c[0], a: `${c[0]}<hr id="answer">${c[1]}`, m: "" })));
+  await Store.putMany("sched", SAMPLE.map((c, i) => ({ k: `${id}|${i}`, t: 0, due: 0, ivl: 0, ease: 2.5, step: 0, r: false, lapses: 0, reps: 0, o: i })));
+  await Store.put("meta", { k: "seeded", v: true });
+}
+
+// ---------- home ----------
+let openMenu = null, statusMsg = null;
+async function home(){
+  const decks = (await Store.all("decks")).sort((a, b) => (a.sample - b.sample) || a.name.localeCompare(b.name));
+  const withCounts = await Promise.all(decks.map(async d => ({ d, c: counts(d, await Store.prefix("sched", d.k)), total: (await Store.prefix("sched", d.k)).length })));
+  const num = (v, cls) => `<span class="${cls}${v ? "" : " zero"}">${v}</span>`;
+  $app.innerHTML = `
+  <div class="screen"><div class="wrap">
+    <header class="top">
+      <div><h1>Pocket Deck</h1><p class="sub">Your Anki decks, on your phone.</p></div>
+      <label class="import" id="import-label"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v9M4 7l4 4 4-4M3 14h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Import .apkg<input type="file" id="file"></label>
+    </header>
+    ${statusMsg ? `<p class="status${statusMsg.err ? " err" : ""}" role="status">${esc(statusMsg.text)}</p>` : ""}
+    ${!Store.persistent ? `<p class="status err">This browser is blocking storage, so decks will be gone when you close the page. Open the page in Safari to keep them.</p>` : ""}
+    <div class="legend"><span>Decks</span><span style="flex:1"></span><b class="c-new">New</b><b class="c-learn">Learn</b><b class="c-due">Due</b></div>
+    <div class="decks">
+      ${withCounts.length ? withCounts.map(({ d, c, total }) => `
+      <div class="deck">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center">
+            <button class="deck-open" data-open="${esc(d.k)}">
+              <span class="deck-name">${esc(d.name)}${d.sample ? '<span class="tag">Sample</span>' : ""}<small>${total} cards</small></span>
+              <span class="counts">${num(c.n, "c-new")}${num(c.l, "c-learn")}${num(c.d, "c-due")}</span>
+            </button>
+            <button class="more" data-menu="${esc(d.k)}" aria-label="Deck options for ${esc(d.name)}" aria-expanded="${openMenu === d.k}">&#8943;</button>
+          </div>
+          ${openMenu === d.k ? `<div class="menu">
+            <button data-limit="${esc(d.k)}">New cards per day: ${d.newPerDay ?? 20}</button>
+            <button data-audit="${esc(d.k)}">Check audio</button>
+            <button data-reset="${esc(d.k)}">Reset progress</button>
+            <button class="danger" data-delete="${esc(d.k)}">${d.confirm ? "Tap again to delete" : "Delete deck"}</button>
+          </div>` : ""}
+        </div>
+      </div>`).join("") : `<p class="empty">No decks yet. Tap Import .apkg to add one.</p>`}
+    </div>
+    <p class="note">Everything stays on this device. Export from Anki on a computer with "Include media" checked to keep images and audio. <button class="linkbtn" id="sound-test" type="button">Test sound</button></p>
+  </div></div>`;
+
+  $app.querySelector("#file").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) importFile(f); });
+  $app.querySelectorAll("[data-open]").forEach(b => b.onclick = () => study(b.dataset.open));
+  $app.querySelector("#sound-test").onclick = async () => {
+    const blob = makeWav(), u = URL.createObjectURL(blob);
+    stopAudio(); unlockAudio();
+    const h = await testHtml(u);
+    const w = await testWeb(blob);
+    statusMsg = { err: h !== "ok" && w !== "ok", text: `Sound test. Beep 1 (normal audio): ${h}. Beep 2 (Web Audio): ${w}. You should have heard two beeps. If you heard none, turn up the volume and flip the silent switch on the side of the phone.` };
+    home();
+  };
+  $app.querySelectorAll("[data-audit]").forEach(b => b.onclick = async () => {
+    statusMsg = { text: await auditDeck(await Store.get("decks", b.dataset.audit)) }; openMenu = null; home();
+  });
+  $app.querySelectorAll("[data-menu]").forEach(b => b.onclick = () => { openMenu = openMenu === b.dataset.menu ? null : b.dataset.menu; home(); });
+  $app.querySelectorAll("[data-limit]").forEach(b => b.onclick = async () => {
+    const d = await Store.get("decks", b.dataset.limit); const opts = [10, 20, 30, 50, 100, 0];
+    d.newPerDay = opts[(opts.indexOf(d.newPerDay ?? 20) + 1) % opts.length]; await Store.put("decks", d); home();
+  });
+  $app.querySelectorAll("[data-reset]").forEach(b => b.onclick = async () => {
+    const k = b.dataset.reset; const sch = await Store.prefix("sched", k);
+    await Store.putMany("sched", sch.map(s => ({ ...s, t: 0, due: 0, ivl: 0, ease: 2.5, step: 0, r: false, lapses: 0, reps: 0 })));
+    statusMsg = { text: "Progress reset. All cards are new again." }; openMenu = null; home();
+  });
+  $app.querySelectorAll("[data-delete]").forEach(b => b.onclick = async () => {
+    const d = await Store.get("decks", b.dataset.delete);
+    if (!d.confirm){ d.confirm = true; await Store.put("decks", d); setTimeout(async () => { const x = await Store.get("decks", d.k); if (x){ delete x.confirm; await Store.put("decks", x); } }, 4000); return home(); }
+    await Store.delPrefix("cards", d.k); await Store.delPrefix("sched", d.k); await Store.del("decks", d.k);
+    const others = (await Store.all("decks")).some(x => x.group === d.group);
+    if (!others) await Store.delPrefix("media", d.group);
+    statusMsg = { text: `Deleted "${d.name}".` }; openMenu = null; home();
+  });
+}
+
+async function auditDeck(d){
+  const cards = await Store.prefix("cards", d.k);
+  const have = new Set(await Store.keys("media", d.group));
+  const names = new Set(); let withSound = 0, tts = 0;
+  const tpl = document.createElement("template");
+  for (const c of cards){
+    tpl.innerHTML = soundTags(c.q + c.a);
+    const btns = tpl.content.querySelectorAll(".pd-sound");
+    btns.forEach(b => { if (b.dataset.tts) tts++; else names.add(b.dataset.src); });
+    if (btns.length) withSound++;
+  }
+  const missing = [...names].filter(n => !mediaCandidates(n).some(c => have.has(c)));
+  if (!withSound) return `Audio check for "${d.name}": no audio found in these cards (${have.size} media files stored). If this deck should have sound, it was probably exported from Anki without media, or it uses a format this app does not read yet.`;
+  return `Audio check for "${d.name}": ${withSound} of ${cards.length} cards have audio. ${names.size - missing.length} of ${names.size} sound files are stored on this phone${missing.length ? `, ${missing.length} missing (for example ${missing.slice(0, 2).join(", ")}). Export again from Anki with media included` : ""}.${tts ? ` ${tts} text-to-speech tags.` : ""}`;
+}
+
+async function importFile(file){
+  const say = text => { statusMsg = { text }; const el = $app.querySelector(".status"); if (el){ el.className = "status"; el.textContent = text; } else home(); };
+  try {
+    say(`Importing ${file.name}...`);
+    await Promise.all([loadScript(LIB.zip), loadScript(LIB.sql), loadScript(LIB.zstd)]);
+    const buf = await file.arrayBuffer();
+    const { cards, css, media } = await parseApkg(buf, { JSZip: window.JSZip, initSqlJs: window.initSqlJs, fzstd: window.fzstd }, step => say(`${step}...`));
+    if (!cards.length) throw new Error("No cards found in this file.");
+    say("Saving to your phone...");
+    const group = uid();
+    const byDeck = {};
+    cards.forEach(c => (byDeck[c.deck] || (byDeck[c.deck] = [])).push(c));
+    const existing = await Store.all("decks");
+    for (const name in byDeck){
+      const k = uid();
+      const taken = existing.some(d => d.name === name);
+      await Store.put("decks", { k, name: taken ? `${name} (${new Date().toLocaleDateString()})` : name, group, css, newPerDay: 20, created: Date.now() });
+      const list = byDeck[name];
+      for (let i = 0; i < list.length; i += 500){
+        const chunk = list.slice(i, i + 500);
+        await Store.putMany("cards", chunk.map(c => ({ k: `${k}|${c.id}`, q: c.q, a: c.a, m: c.m })));
+        await Store.putMany("sched", chunk.map((c, j) => ({ k: `${k}|${c.id}`, ...c.s, o: i + j })));
+      }
+    }
+    for (let i = 0; i < media.length; i += 50)
+      await Store.putMany("media", media.slice(i, i + 50).map(m => ({ k: `${group}|${m.name.normalize("NFC")}`, blob: new Blob([m.data], { type: m.type }) })));
+    const n = Object.keys(byDeck).length;
+    const have = new Set(media.map(m => m.name.normalize("NFC")));
+    const used = new Set(); let ttsN = 0;
+    for (const c of cards){
+      for (const m of (c.q + c.a).matchAll(/data-src="([^"]*)"/g)) used.add(m[1].replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&amp;/g, "&"));
+      if (/data-tts=/.test(c.q + c.a)) ttsN++;
+    }
+    const miss = [...used].filter(u => !mediaCandidates(u).some(x => have.has(x)));
+    const audioNote = used.size ? ` Audio: ${used.size - miss.length} of ${used.size} sound files found.${miss.length ? " The rest are missing from the file, so export again from Anki with media included." : ""}` : (ttsN ? " This deck speaks cards with your phone's voice." : "");
+    statusMsg = { text: `Added ${cards.length} cards${n > 1 ? ` in ${n} decks` : ""}${media.length ? ` and ${media.length} media file${media.length > 1 ? "s" : ""}` : ""}.${audioNote}` };
+  } catch (e){
+    console.error(e);
+    statusMsg = { err: true, text: e && e.message ? e.message : "That file could not be read." };
+  }
+  home();
+}
+
+// ---------- study ----------
+async function study(deckKey){
+  statusMsg = null; openMenu = null;
+  const deck = await Store.get("decks", deckKey);
+  const cards = new Map((await Store.prefix("cards", deckKey)).map(c => [c.k, c]));
+  const sched = new Map((await Store.prefix("sched", deckKey)).map(s => [s.k, s]));
+  const urls = new Map(); const mediaCache = new Map();
+  const mediaURL = async name => {
+    if (urls.has(name)) return urls.get(name);
+    const cands = mediaCandidates(name);
+    let m = null;
+    for (const c of cands){ m = await Store.get("media", `${deck.group}|${c}`); if (m) break; }
+    const u = m ? URL.createObjectURL(m.blob) : null;
+    if (u) blobOf.set(u, m.blob);
+    urls.set(name, u); return u;
+  };
+  let current = null, flipped = false, history = [], sounds = [];
+  notifyFn = flash;
+
+  function pickNext(){
+    const now = Date.now(), eod = startOfDay(now) + DAY;
+    const c = counts(deck, sched.values(), now);
+    let learnNow = null, review = null, fresh = null, learnSoon = null, nextLearn = Infinity;
+    for (const s of sched.values()){
+      if (s.sus) continue;
+      if (s.t === 1){
+        if (s.due <= now){ if (!learnNow || s.due < learnNow.due) learnNow = s; }
+        else if (s.due <= now + 20 * MIN){ if (!learnSoon || s.due < learnSoon.due) learnSoon = s; }
+        if (s.due > now) nextLearn = Math.min(nextLearn, s.due);
+      } else if (s.t === 2 && s.due < eod){ if (!review || s.due < review.due) review = s; }
+      else if (s.t === 0 && c.n > 0){ if (!fresh || (s.o ?? 0) < (fresh.o ?? 0)) fresh = s; }
+    }
+    return { pick: learnNow || review || fresh || learnSoon, c, nextLearn };
+  }
+
+  function shell(){
+    $app.innerHTML = `
+    <div class="screen">
+      <div class="bar"><div class="wrap">
+        <button class="back" id="back"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M8 2 2 8l6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Decks</button>
+        <div class="bar-title">${esc(deck.name)}</div>
+        <button class="undo" id="undo" disabled>Undo</button>
+      </div></div>
+      <div class="stage wrap" id="stage"></div>
+      <div class="dock" id="dock"></div>
+      <div class="toast" id="toast" role="status" hidden></div>
+    </div>`;
+    $app.querySelector("#back").onclick = () => { stopAudio(); notifyFn = () => {}; urls.forEach(u => u && URL.revokeObjectURL(u)); document.onkeydown = null; home(); };
+    $app.querySelector("#undo").onclick = async () => {
+      const h = history.pop(); if (!h) return;
+      sched.set(h.s.k, h.s); await Store.put("sched", h.s);
+      if (h.newCounted){ deck.newDone = Math.max(0, (deck.newDone || 0) - 1); await Store.put("decks", deck); }
+      show(h.s);
+    };
+  }
+
+  async function renderCard(html){
+    const stage = $app.querySelector("#stage");
+    stage.innerHTML = `<div class="card-host" id="host"></div>`;
+    const host = stage.querySelector("#host");
+    const root = host.attachShadow({ mode: "open" });
+    const css = (deck.css && deck.css[current.card.m]) || "";
+    root.innerHTML = `<style>
+      :host{display:block;font-size:20px;line-height:1.45;color:inherit}
+      ${css}
+      .card{background:none!important;color:inherit!important;font-family:inherit}
+      img{max-width:100%;height:auto} video{max-width:100%}
+      hr#answer{border:0;border-top:1px solid currentColor;opacity:.2;margin:18px 0}
+      .cloze{font-weight:700;color:#2a6fe0}
+      @media (prefers-color-scheme:dark){.cloze{color:#8fb4ff}}
+      .pd-sound{border:1px solid currentColor;border-radius:999px;background:none;color:inherit;width:40px;height:40px;font-size:14px;opacity:.75;cursor:pointer;vertical-align:middle;margin:4px}
+      table{border-collapse:collapse;max-width:100%} details.hint summary{cursor:pointer;opacity:.7}
+    </style><div class="card">${soundTags(html)}</div>`;
+    for (const el of root.querySelectorAll("[src]")){
+      const src = el.getAttribute("src");
+      if (/^(https?:|data:|blob:)/i.test(src)) continue;
+      let name = src; try { name = decodeURIComponent(src); } catch (e) {}
+      const u = await mediaURL(name); if (u) el.setAttribute("src", u);
+    }
+    sounds = [];
+    for (const b of root.querySelectorAll(".pd-sound")){
+      let item = null;
+      if (b.dataset.tts) item = { tts: b.dataset.tts, lang: b.dataset.lang };
+      else { const u = await mediaURL(b.dataset.src); if (u) item = { u, blob: blobOf.get(u) }; }
+      sounds.push(item);
+      b.onclick = e => { e.stopPropagation(); item ? playList([item]) : flash(`The audio file "${b.dataset.src}" is not in this deck's export.`); };
+    }
+    host.onclick = e => { if (!flipped && !e.composedPath().some(n => n.tagName === "A" || n.tagName === "DETAILS")) flip(); };
+  }
+
+  function queueLine(c, kind){
+    const rp = sounds.length ? `<button class="replay" id="replay" type="button" aria-label="Replay audio"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.8a6 6 0 0 1 0 8.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>Replay</button>` : "";
+    return `<div class="queue"><span class="c-new${kind === 0 ? " on" : ""}">${c.n}</span><span class="c-learn${kind === 1 ? " on" : ""}">${c.l}</span><span class="c-due${kind === 2 ? " on" : ""}">${c.d}</span>${rp}</div>`;
+  }
+  let toastTimer;
+  function flash(msg){
+    const t = $app.querySelector("#toast"); if (!t) return;
+    t.textContent = msg; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4500);
+  }
+  function autoplay(){
+    const list = sounds.filter(Boolean);
+    if (list.length) playList(list);
+    else if (sounds.length) flash("This card's audio file is not in the deck's export. Export from Anki with media included.");
+  }
+  function afterDock(){
+    const r = $app.querySelector("#replay"); if (r) r.onclick = autoplay;
+    autoplay();
+  }
+
+  async function show(forced){
+    stopAudio();
+    flipped = false;
+    $app.querySelector("#undo").disabled = !history.length;
+    const { pick, c, nextLearn } = pickNext();
+    const s = forced || pick;
+    const dock = $app.querySelector("#dock");
+    if (!s){
+      dock.innerHTML = "";
+      const later = isFinite(nextLearn) && nextLearn < startOfDay(Date.now()) + DAY;
+      $app.querySelector("#stage").innerHTML = `<div class="done">
+        <h2>${later ? "Done for now" : "All caught up"}</h2>
+        <p>${later ? `Your next learning card is ready in ${fmtIvl(nextLearn - Date.now())}.` : "No more cards due today in this deck. Come back tomorrow."}</p>
+        <button id="home2">Back to decks</button></div>`;
+      $app.querySelector("#home2").onclick = () => $app.querySelector("#back").click();
+      if (later) setTimeout(() => { if (!current && document.body.contains(dock)) show(); }, Math.min(nextLearn - Date.now() + 500, 2 ** 31 - 1));
+      current = null; return;
+    }
+    current = { s, card: cards.get(s.k) };
+    await renderCard(current.card.q);
+    dock.innerHTML = `<div class="wrap">${queueLine(c, s.t)}<button class="show" id="flip">Show answer</button></div>`;
+    dock.querySelector("#flip").onclick = flip;
+    afterDock();
+  }
+
+  async function flip(){
+    if (!current || flipped) return;
+    flipped = true;
+    await renderCard(current.card.a);
+    const host = $app.querySelector("#host");
+    const ans = host.shadowRoot.querySelector("#answer"); if (ans) ans.scrollIntoView({ block: "start", behavior: "instant" });
+    const now = Date.now();
+    const labels = ["Again", "Hard", "Good", "Easy"];
+    const { c } = pickNext();
+    $app.querySelector("#dock").innerHTML = `<div class="wrap">${queueLine(c, current.s.t)}<div class="grades">${labels.map((l, i) => {
+      const nx = schedule(current.s, i + 1, now);
+      return `<button class="g${i + 1}" data-g="${i + 1}"><small>${fmtIvl(nx.due - now)}</small><span>${l}</span></button>`;
+    }).join("")}</div></div>`;
+    $app.querySelectorAll("[data-g]").forEach(b => b.onclick = () => answer(+b.dataset.g));
+    afterDock();
+  }
+
+  async function answer(g){
+    if (!current || !flipped) return;
+    const before = current.s; const now = Date.now();
+    const next = schedule(before, g, now);
+    let newCounted = false;
+    if (before.t === 0){
+      if (deck.newDay !== dayKey(now)){ deck.newDay = dayKey(now); deck.newDone = 0; }
+      deck.newDone = (deck.newDone || 0) + 1; newCounted = true;
+      await Store.put("decks", deck);
+    }
+    history.push({ s: before, newCounted }); if (history.length > 30) history.shift();
+    sched.set(next.k, next); await Store.put("sched", next);
+    current = null; show();
+  }
+
+  document.onkeydown = e => {
+    if (e.key === " " || e.key === "Enter"){ if (!flipped){ e.preventDefault(); flip(); } }
+    else if (flipped && "1234".includes(e.key)) answer(+e.key);
+  };
+  shell(); show();
+}
+
+(async () => {
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist().catch(() => {}); } catch (e) {}
+  await Store.ready();
+  try { await seedSample(); } catch (e) { console.error(e); }
+  home();
+})();
+</script>
+</body>
+</html>
