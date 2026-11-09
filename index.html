@@ -266,14 +266,14 @@ async function parseApkg(buffer, libs, onStep = () => {}){
         });
       }
       for (const zipName in map){
-        const f = zip.file(zipName); if (!f) continue;
-        let u = await f.async("uint8array");
-        if (isZstd(u)) u = fzstd.decompress(u);
+        if (!zip.file(zipName)) continue;
         const name = map[zipName]; const ext = name.split(".").pop().toLowerCase();
-        media.push({ name, type: MIME[ext] || "application/octet-stream", data: u });
+        media.push({ zipName, name, type: MIME[ext] || "application/octet-stream" });
       }
     }
-    return { cards, css, media };
+    // media is read one file at a time while saving, so the phone never holds every file in memory at once
+    const readMedia = async f => { let u = await zip.file(f.zipName).async("uint8array"); if (isZstd(u)) u = fzstd.decompress(u); return u; };
+    return { cards, css, media, readMedia };
   } finally { db.close(); }
 }
 
@@ -607,31 +607,58 @@ async function auditDeck(d){
 
 async function importFile(file){
   const say = text => { statusMsg = { text }; const el = $app.querySelector(".status"); if (el){ el.className = "status"; el.textContent = text; } else home(); };
+  let lock = null;
   try {
+    try { lock = navigator.wakeLock ? await navigator.wakeLock.request("screen") : null; } catch (e) {}
     say(`Importing ${file.name}...`);
     await Promise.all([loadScript(LIB.zip), loadScript(LIB.sql), loadScript(LIB.zstd)]);
     const buf = await file.arrayBuffer();
-    const { cards, css, media } = await parseApkg(buf, { JSZip: window.JSZip, initSqlJs: window.initSqlJs, fzstd: window.fzstd }, step => say(`${step}...`));
+    const { cards, css, media, readMedia } = await parseApkg(buf, { JSZip: window.JSZip, initSqlJs: window.initSqlJs, fzstd: window.fzstd }, step => say(`${step}...`));
     if (!cards.length) throw new Error("No cards found in this file.");
-    say("Saving to your phone...");
-    const group = uid();
+    say("Saving cards...");
+
+    // Group cards by deck. A deck with the same name as one already here is updated in place:
+    // card text is refreshed, missing audio is filled in, and existing progress is kept.
     const byDeck = {};
     cards.forEach(c => (byDeck[c.deck] || (byDeck[c.deck] = [])).push(c));
-    const existing = await Store.all("decks");
+    const existing = (await Store.all("decks")).filter(d => !d.sample);
+    const newGroup = uid(), groups = new Set();
+    let added = 0, updated = 0;
     for (const name in byDeck){
-      const k = uid();
-      const taken = existing.some(d => d.name === name);
-      await Store.put("decks", { k, name: taken ? `${name} (${new Date().toLocaleDateString()})` : name, group, css, newPerDay: 20, created: Date.now() });
       const list = byDeck[name];
-      for (let i = 0; i < list.length; i += 500){
-        const chunk = list.slice(i, i + 500);
+      const ex = existing.find(d => d.name === name);
+      let k;
+      if (ex){ k = ex.k; ex.css = css; delete ex.confirm; await Store.put("decks", ex); groups.add(ex.group); updated++; }
+      else { k = uid(); await Store.put("decks", { k, name, group: newGroup, css, newPerDay: 20, created: Date.now() }); groups.add(newGroup); added++; }
+      const known = ex ? new Set(await Store.keys("sched", k)) : new Set();
+      for (let i = 0; i < list.length; i += 200){
+        const chunk = list.slice(i, i + 200);
         await Store.putMany("cards", chunk.map(c => ({ k: `${k}|${c.id}`, q: c.q, a: c.a, m: c.m })));
-        await Store.putMany("sched", chunk.map((c, j) => ({ k: `${k}|${c.id}`, ...c.s, o: i + j })));
+        const fresh = chunk.map((c, j) => ({ c, o: i + j })).filter(x => !known.has(x.c.id));
+        if (fresh.length) await Store.putMany("sched", fresh.map(x => ({ k: `${k}|${x.c.id}`, ...x.c.s, o: x.o })));
       }
     }
-    for (let i = 0; i < media.length; i += 50)
-      await Store.putMany("media", media.slice(i, i + 50).map(m => ({ k: `${group}|${m.name.normalize("NFC")}`, blob: new Blob([m.data], { type: m.type }) })));
-    const n = Object.keys(byDeck).length;
+
+    // Save media one file at a time, with retries, as plain bytes (more reliable in Safari than Blobs).
+    let saved = 0, failed = 0, lastErr = "";
+    for (let i = 0; i < media.length; i++){
+      if (i % 10 === 0) say(`Saving audio and images: ${i} of ${media.length}...`);
+      const f = media[i];
+      let ok = false;
+      for (let t = 0; t < 3 && !ok; t++){
+        try {
+          const u = await readMedia(f);
+          const data = u.buffer.slice(u.byteOffset, u.byteOffset + u.byteLength);
+          await Store.putMany("media", [...groups].map(g => ({ k: `${g}|${f.name.normalize("NFC")}`, data, type: f.type })));
+          ok = true;
+        } catch (e) {
+          lastErr = e && e.name ? e.name + (e.message ? ": " + e.message : "") : String(e);
+          await new Promise(r => setTimeout(r, 400 * (t + 1)));
+        }
+      }
+      ok ? saved++ : failed++;
+    }
+
     const have = new Set(media.map(m => m.name.normalize("NFC")));
     const used = new Set(); let ttsN = 0;
     for (const c of cards){
@@ -639,11 +666,19 @@ async function importFile(file){
       if (/data-tts=/.test(c.q + c.a)) ttsN++;
     }
     const miss = [...used].filter(u => !mediaCandidates(u).some(x => have.has(x)));
-    const audioNote = used.size ? ` Audio: ${used.size - miss.length} of ${used.size} sound files found.${miss.length ? " The rest are missing from the file, so export again from Anki with media included." : ""}` : (ttsN ? " This deck speaks cards with your phone's voice." : "");
-    statusMsg = { text: `Added ${cards.length} cards${n > 1 ? ` in ${n} decks` : ""}${media.length ? ` and ${media.length} media file${media.length > 1 ? "s" : ""}` : ""}.${audioNote}` };
+    const n = Object.keys(byDeck).length;
+    const parts = [];
+    parts.push(updated && !added ? `Updated ${cards.length} cards. Your progress is kept.` : `Added ${cards.length} cards${n > 1 ? ` in ${n} decks` : ""}${updated ? " (existing decks updated, progress kept)" : ""}.`);
+    if (media.length) parts.push(`${saved} of ${media.length} audio and image files saved.`);
+    if (miss.length) parts.push(`${miss.length} sound files used by cards are not in this file, so export again from Anki with media included.`);
+    else if (!used.size && ttsN) parts.push("This deck speaks cards with your phone's voice.");
+    if (failed) parts.push(`${failed} file${failed > 1 ? "s" : ""} could not be saved (${lastErr}). Import the same file again to retry. Your progress is kept.`);
+    statusMsg = { err: failed > 0, text: parts.join(" ") };
   } catch (e){
     console.error(e);
     statusMsg = { err: true, text: e && e.message ? e.message : "That file could not be read." };
+  } finally {
+    try { lock && lock.release(); } catch (e) {}
   }
   home();
 }
@@ -660,8 +695,9 @@ async function study(deckKey){
     const cands = mediaCandidates(name);
     let m = null;
     for (const c of cands){ m = await Store.get("media", `${deck.group}|${c}`); if (m) break; }
-    const u = m ? URL.createObjectURL(m.blob) : null;
-    if (u) blobOf.set(u, m.blob);
+    const blob = m ? (m.blob || new Blob([m.data], { type: m.type })) : null;
+    const u = blob ? URL.createObjectURL(blob) : null;
+    if (u) blobOf.set(u, blob);
     urls.set(name, u); return u;
   };
   let current = null, flipped = false, history = [], sounds = [];
